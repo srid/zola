@@ -61,23 +61,35 @@
                 };
               };
             };
+          membersList = builtins.attrValues (builtins.mapAttrs (name: member: {
+            inherit name;
+            value = member.build;
+          }) project.workspaceMembers);
+          # packages = builtins.listToAttrs membersList;
 
           # Configuration for the non-Rust dependencies
           buildInputs = with pkgs; [ openssl.dev ];
           nativeBuildInputs = with pkgs; [ rustc cargo pkgconfig ];
         in
         rec {
-          packages.${name} = project.rootCrate.build;
+          packages = builtins.listToAttrs membersList;
 
           # `nix build`
-          defaultPackage = packages.${name};
+          /* defaultPackage = builtins.mapAttrs (system: pkgs:
+            pkgs.buildEnv {
+              name = "zola";
+              paths = builtins.attrValues self.packages.${system};
+            }) nixpkgs.legacyPackages;
+            */
+          defaultPackage = project.workspaceMembers.zola.build;
 
           # `nix run`
-          apps.${name} = utils.lib.mkApp {
-            inherit name;
-            drv = packages.${name};
-          };
-          defaultApp = apps.${name};
+          apps = builtins.mapAttrs (_:
+            builtins.mapAttrs (_: pkg: {
+              type = "app";
+              program = "${pkg}/bin/${pkg.pname}";
+            })) self.packages;
+          # defaultApp = apps.${name};
 
           # `nix develop`
           devShell = pkgs.mkShell
